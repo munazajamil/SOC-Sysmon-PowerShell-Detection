@@ -108,3 +108,30 @@ Wazuh flagged as reconnaissance activity.
 ---
 
 ## 📊 MITRE ATT&CK Coverage Summary
+
+Tactics Covered:
+├── Execution → T1059.001
+├── Defense Evasion → T1059.001
+├── Command & Control → T1105
+├── Credential Access → T1003.001
+└── Discovery → T1057, T1082
+
+
+---
+
+## 🛡️ Defensive Layers That Worked
+
+| Layer                          | What It Caught |
+|--------------------------------|----------------|
+| AMSI (Windows Defender)        | Blocked malicious PowerShell |
+| Script Block Logging           | Captured encoded commands |
+| Wazuh Rules                    | Detected & MITRE-mapped attacks |
+| Sysmon                         | Provided detailed telemetry |
+
+---
+
+## 👩‍💻 Portfolio
+
+Part of SOC Analyst Home Lab by **Munnaza Jamil**  
+  
+🔗 LinkedIn https://www.linkedin.com/in/munazajamil/
