@@ -1,4 +1,4 @@
-# 🛡️ SOC Project 2: Fileless Attack Detection with Sysmon + Wazuh
+# 🛡️ SOC Project 2: Fileless Attack Detection with Wazuh
 
 ![Wazuh](https://img.shields.io/badge/SIEM-Wazuh-blue?style=for-the-badge&logo=data:image/png;base64,)
 ![MITRE](https://img.shields.io/badge/Framework-MITRE%20ATT%26CK-red?style=for-the-badge)
