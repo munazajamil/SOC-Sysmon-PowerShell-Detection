@@ -1,1 +1,1 @@
-All the screentshots of lab is attcher here.
+All the screentshots of lab is attched here.
